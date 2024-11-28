@@ -1,0 +1,238 @@
+// import 'package:flutter/material.dart';
+// import 'package:camera/camera.dart';
+// import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+
+// class NewServiceApplicationDetailsPhotoScreen extends StatefulWidget {
+//   const NewServiceApplicationDetailsPhotoScreen({super.key});
+
+//   @override
+//   _NewServiceApplicationDetailsPhotoScreenState createState() =>
+//       _NewServiceApplicationDetailsPhotoScreenState();
+// }
+
+// class _NewServiceApplicationDetailsPhotoScreenState
+//     extends State<NewServiceApplicationDetailsPhotoScreen> {
+//   CameraController? _controller;
+//   late FaceDetector _faceDetector;
+//   bool _isDetecting = false;
+//   bool _faceDetected = false;
+//   bool _isCorrectDistance = false;
+//   String _message = "Position your face in the frame";
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _initializeCamera();
+//     final options = FaceDetectorOptions(
+//       enableLandmarks: true,
+//       enableClassification: true,
+//       enableTracking: true,
+//       minFaceSize: 0.15,
+//     );
+//     _faceDetector = FaceDetector(options: options);
+//   }
+
+//   Future<void> _initializeCamera() async {
+//     final cameras = await availableCameras();
+//     final front = cameras.firstWhere(
+//       (camera) => camera.lensDirection == CameraLensDirection.front,
+//     );
+
+//     _controller = CameraController(
+//       front,
+//       ResolutionPreset.medium,
+//       enableAudio: false,
+//       imageFormatGroup: ImageFormatGroup.yuv420, // Changed to YUV420
+//     );
+
+//     await _controller!.initialize();
+//     if (mounted) {
+//       setState(() {});
+//     }
+
+//     _controller!.startImageStream((CameraImage image) {
+//       if (!_isDetecting) {
+//         _isDetecting = true;
+//         _detectFace(image);
+//       }
+//     });
+//   }
+
+//   Future<InputImage> processImageFromCamera(CameraImage image) async {
+//     // Get image rotation
+//     final camera = _controller!.description;
+//     final rotation =
+//         InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
+//             InputImageRotation.rotation0deg;
+
+//     // Get image format
+//     final format = InputImageFormatValue.fromRawValue(image.format.raw) ??
+//         InputImageFormat.yuv420;
+
+//     // Get plane data
+//     final planes = image.planes;
+//     final bytes = planes.map((plane) => plane.bytes).toList();
+//     final width = image.width;
+//     final height = image.height;
+
+//     // Create InputImage
+//     final inputImageData = InputImageMetadata(
+//       size: Size(width.toDouble(), height.toDouble()),
+//       rotation: rotation,
+//       format: format,
+//       bytesPerRow: planes[0].bytesPerRow,
+//     );
+
+//     final inputImage = InputImage.fromBytes(
+//       bytes: bytes[0],
+//       metadata: inputImageData,
+//     );
+
+//     return inputImage;
+//   }
+
+//   Future<void> _detectFace(CameraImage image) async {
+//     try {
+//       final inputImage = await processImageFromCamera(image);
+//       final faces = await _faceDetector.processImage(inputImage);
+
+//       if (faces.isEmpty) {
+//         setState(() {
+//           _faceDetected = false;
+//           _message = "No face detected";
+//         });
+//       } else if (faces.length > 1) {
+//         setState(() {
+//           _message = "Multiple faces detected";
+//         });
+//       } else {
+//         final face = faces[0];
+
+//         // Calculate proximity based on face size relative to frame
+//         final double faceSize = face.boundingBox.width / image.width;
+//         final bool isCorrectDistance = faceSize > 0.4 && faceSize < 0.6;
+
+//         // Check if eyes are open (if probability is available)
+//         final bool eyesOpen = face.leftEyeOpenProbability != null &&
+//             face.rightEyeOpenProbability != null &&
+//             face.leftEyeOpenProbability! > 0.5 &&
+//             face.rightEyeOpenProbability! > 0.5;
+
+//         setState(() {
+//           _faceDetected = true;
+//           _isCorrectDistance = isCorrectDistance;
+
+//           if (!isCorrectDistance) {
+//             _message = faceSize < 0.4
+//                 ? "Move closer to the camera"
+//                 : "Move farther from the camera";
+//           } else if (!eyesOpen) {
+//             _message = "Please keep your eyes open";
+//           } else if (face.headEulerAngleY! > 10 ||
+//               face.headEulerAngleY! < -10) {
+//             _message = "Please look straight at the camera";
+//           } else {
+//             _message = "Perfect! Face verified";
+//           }
+//         });
+//       }
+//     } catch (e) {
+//       print('Error during face detection: $e');
+//     } finally {
+//       _isDetecting = false;
+//     }
+//   }
+
+//   @override
+//   void dispose() {
+//     _controller?.dispose();
+//     _faceDetector.close();
+//     super.dispose();
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     if (_controller == null || !_controller!.value.isInitialized) {
+//       return const Scaffold(
+//         body: Center(child: CircularProgressIndicator()),
+//       );
+//     }
+
+//     return Scaffold(
+//       appBar: AppBar(title: Text('Face Verification')),
+//       body: Column(
+//         children: [
+//           Expanded(
+//             child: Container(
+//               constraints: BoxConstraints.expand(),
+//               child: Stack(
+//                 fit: StackFit.expand,
+//                 children: [
+//                   CameraPreview(_controller!),
+//                   CustomPaint(
+//                     painter: FaceOverlayPainter(
+//                       isDetected: _faceDetected,
+//                       isCorrectDistance: _isCorrectDistance,
+//                     ),
+//                   ),
+//                   Positioned(
+//                     bottom: 50,
+//                     left: 0,
+//                     right: 0,
+//                     child: Container(
+//                       color: Colors.black54,
+//                       padding: EdgeInsets.all(16),
+//                       child: Text(
+//                         _message,
+//                         textAlign: TextAlign.center,
+//                         style: TextStyle(
+//                           color: Colors.white,
+//                           fontSize: 18,
+//                         ),
+//                       ),
+//                     ),
+//                   ),
+//                 ],
+//               ),
+//             ),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+// }
+
+// class FaceOverlayPainter extends CustomPainter {
+//   final bool isDetected;
+//   final bool isCorrectDistance;
+
+//   FaceOverlayPainter({
+//     required this.isDetected,
+//     required this.isCorrectDistance,
+//   });
+
+//   @override
+//   void paint(Canvas canvas, Size size) {
+//     final paint = Paint()
+//       ..style = PaintingStyle.stroke
+//       ..strokeWidth = 4.0
+//       ..color = isDetected
+//           ? (isCorrectDistance ? Colors.green : Colors.yellow)
+//           : Colors.red;
+
+//     final centerOffset = Offset(size.width / 2, size.height / 2);
+//     final ovalRect = Rect.fromCenter(
+//       center: centerOffset,
+//       width: size.width * 0.65,
+//       height: size.height * 0.8,
+//     );
+
+//     canvas.drawOval(ovalRect, paint);
+//   }
+
+//   @override
+//   bool shouldRepaint(FaceOverlayPainter oldDelegate) {
+//     return isDetected != oldDelegate.isDetected ||
+//         isCorrectDistance != oldDelegate.isCorrectDistance;
+//   }
+// }
